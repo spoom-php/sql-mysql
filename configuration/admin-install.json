@@ -1,0 +1,12 @@
+{
+  "dependency": {
+    "framework": {
+      "version": "0.5.2",
+      "require": true
+    },
+    "sql": {
+      "version": "1.0.0",
+      "require": true
+    }
+  }
+}

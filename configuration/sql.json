@@ -1,0 +1,9 @@
+{
+  "host": null,
+  "user": null,
+  "password": null,
+  "port": null,
+  "socket": null,
+  "encoding": "utf8",
+  "database": ""
+}
