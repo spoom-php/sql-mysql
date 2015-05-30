@@ -6,6 +6,7 @@ use Sql;
 /**
  * Class Transaction
  * @package Sql\Mysql
+ * @since 1.1.0
  */
 class Transaction extends Sql\Transaction {
 
