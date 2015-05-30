@@ -1,3 +1,5 @@
 {
-  "#1C": "Unable to select the database ({0})"
+  "#1C": "Unable to select the database ({0})",
+  "#2C": "Failed to start the transaction",
+  "#3C": "Failed to commit or rollback the transaction"
 }
