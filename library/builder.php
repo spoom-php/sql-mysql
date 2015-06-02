@@ -56,7 +56,7 @@ class Builder extends SqlBuilder {
     $command .= $this->buildFilter( 'where' );
 
     // adding groups
-    $command .= $this->buildList( $this->orders, 'GROUP BY' );
+    $command .= $this->buildList( $this->groups, 'GROUP BY' );
     $command .= $this->buildFlags( [ 'WITH ROLLUP' ] );
 
     // adding having
