@@ -13,6 +13,8 @@ class Builder extends SqlBuilder {
 
   /**
    * Pattern for MySQL identifier names
+   *
+   * @since 1.1.2
    */
   const PATTERN_IDENTIFIER = '/^[a-z0-9\\$\\_]+$/i';
 
@@ -321,6 +323,8 @@ class Builder extends SqlBuilder {
   }
   /**
    * Build " {field} {operator} {expression}" like strings
+   *
+   * @since 1.1.2
    *
    * @param string|Builder $expression
    * @param string|null    $field
