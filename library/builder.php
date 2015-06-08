@@ -12,6 +12,13 @@ use Sql\Builder as SqlBuilder;
 class Builder extends SqlBuilder {
 
   /**
+   * Pattern for MySQL identifier names
+   *
+   * @since 1.1.2
+   */
+  const PATTERN_IDENTIFIER = '/^[a-z0-9\\$\\_]+$/i';
+
+  /**
    * Build SELECT command based on builder data
    *
    * http://dev.mysql.com/doc/refman/5.7/en/select.html
@@ -106,7 +113,7 @@ class Builder extends SqlBuilder {
 
     // adding the first table
     foreach( $this->tables as $definition ) if( !is_array( $definition ) ) {
-      $command .= $this->buildExpression( $definition, $definition );
+      $command .= ' ' . $this->dbq->quoteName( $definition );
       break;
     }
 
@@ -117,8 +124,8 @@ class Builder extends SqlBuilder {
 
     // add table fields
     $tmp = [ ];
-    foreach( $this->fields as $alias => $definition ) $tmp[ ] = $this->dbq->quoteName( $alias );
-    $command .= '(' . implode( ',', $tmp ) . ')';
+    foreach( $this->fields as $alias => $definition ) $tmp[ ] = ' ' . $this->dbq->quoteName( $alias );
+    $command .= '(' . implode( ',', $tmp ) . ' )';
 
     // add custom select command if any (and ignore simple and batch insertion)
     if( isset( $this->customs[ 'select' ] ) ) {
@@ -137,9 +144,9 @@ class Builder extends SqlBuilder {
 
       $value_array = [ ];
       foreach( $this->fields as $alias => $definition ) {
-        $value_array[ ] = $alias == $definition ? "{field_{$alias}}" : ( $definition instanceof Builder ? "({$definition})" : $definition );
+        $value_array[ ] = $this->buildExpression( $alias == $definition ? "{field_{$alias}}" : $definition );
       }
-      $command .= ' VALUES(' . implode( ',', $value_array ) . ')';
+      $command .= ' VALUES(' . implode( ',', $value_array ) . ' )';
 
       // add fields to the insertion
       $this->each( function ( $key, $value, $index, $builder ) {
@@ -174,7 +181,7 @@ class Builder extends SqlBuilder {
     foreach( $this->tables as $alias => $definition ) if( !is_array( $definition ) ) {
       $tmp[ ] = $this->buildExpression( $definition, $alias );
     }
-    $command .= implode( ', ', $tmp );
+    $command .= implode( ',', $tmp );
 
     // adding joins
     foreach( $this->tables as $alias => $data ) if( is_array( $data ) ) {
@@ -185,9 +192,9 @@ class Builder extends SqlBuilder {
     $fields      = $this->fields;
     $field_array = [ ];
     foreach( $fields as $alias => $definition ) {
-      $field_array[ ] = $alias . ' = ' . ( $alias == $definition ? "{field_{$alias}}" : ( $definition instanceof Builder ? "({$definition})" : $definition ) );
+      $field_array[ ] = $this->buildOperation( $definition == $alias ? "{field_{$alias}}" : $definition, $alias, '=' );
     }
-    $command .= ' SET ' . implode( ', ', $field_array );
+    $command .= ' SET' . implode( ',', $field_array );
 
     // add fields to the insertion
     $this->each( function ( $key, $value, $index, $builder ) {
@@ -243,13 +250,13 @@ class Builder extends SqlBuilder {
     }
 
     // add tables
-    $command .= ' FROM ' . implode( ',', $tmp );
+    $command .= ' FROM' . implode( ',', $tmp );
 
     // adding joins in multitable syntax
     if( $multi ) {
 
       foreach( $this->tables as $alias => $data ) if( is_array( $data ) ) {
-        $command .= ' ' . strtoupper( $data[ 'type' ] ) . ' JOIN ' . $this->buildExpression( $data[ 'definition' ], $alias ) . ' ON ' . $data[ 'condition' ];
+        $command .= ' ' . strtoupper( $data[ 'type' ] ) . ' JOIN' . $this->buildExpression( $data[ 'definition' ], $alias ) . ' ON ' . $data[ 'condition' ];
       }
     }
 
@@ -294,7 +301,7 @@ class Builder extends SqlBuilder {
     return $result;
   }
   /**
-   * Build expression with alias. This will convert Builder class to valid expression
+   * Build expression with alias. This will convert Builder class to valid expression or quote it if needed
    *
    * @since 0.10.0
    *
@@ -305,10 +312,28 @@ class Builder extends SqlBuilder {
    */
   protected function buildExpression( $expression, $alias = null ) {
 
-    $expression = $expression instanceof Builder ? "({$expression})" : $expression;
-    $alias      = empty( $alias ) || $alias == $expression ? '' : ( ' AS ' . $this->dbq->quoteName( $alias ) );
+    // define the alias part if needed
+    $alias = empty( $alias ) || $alias == $expression ? '' : ( ' AS ' . $this->dbq->quoteName( $alias ) );
+
+    // define the expression
+    if( $expression instanceof Builder ) $expression = "({$expression})";
+    else if( preg_match( static::PATTERN_IDENTIFIER, $expression ) ) $expression = $this->dbq->quoteName( $expression );
 
     return ' ' . $expression . $alias;
+  }
+  /**
+   * Build " {field} {operator} {expression}" like strings
+   *
+   * @since 1.1.2
+   *
+   * @param string|Builder $expression
+   * @param string|null    $field
+   * @param string|null    $operator
+   *
+   * @return string
+   */
+  protected function buildOperation( $expression, $field, $operator ) {
+    return ' ' . $this->dbq->quoteName( $field ) . ' ' . $operator . $this->buildExpression( $expression );
   }
   /**
    * Build a filter string with the stored data
