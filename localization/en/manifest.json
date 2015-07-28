@@ -1,4 +1,3 @@
 {
-  "package": "SQL abstraction",
-  "name": "Mysql driver"
+  "id": "MySQL driver for the SQL abstraction"
 }
