@@ -33,37 +33,6 @@ class Connection extends SqlConnection {
   protected $_link;
 
   /**
-   * @param string $index
-   *
-   * @return mixed
-   */
-  public function __get( $index ) {
-    if( $index == 'link' ) $this->connect();
-
-    $i = '_' . $index;
-    if( property_exists( $this, $i ) ) return $this->{$i};
-    else return parent::__get( $index );
-  }
-  /**
-   * @param string $index
-   * @param mixed  $value
-   */
-  public function __set( $index, $value ) {
-    switch( $index ) {
-      case 'database':
-        $this->database( $value );
-    }
-  }
-  /**
-   * @param string $index
-   *
-   * @return bool
-   */
-  public function __isset( $index ) {
-    return property_exists( $this, '_' . $index ) || parent::__isset( $index );
-  }
-
-  /**
    * Disconnect from the database server
    *
    * @return $this
@@ -141,5 +110,32 @@ class Connection extends SqlConnection {
     else $this->_database = $name;
 
     return $this;
+  }
+
+  /**
+   * @since 1.2.0
+   *
+   * @return string
+   */
+  public function getDatabase() {
+    return $this->_database;
+  }
+  /**
+   * @since 1.2.0
+   *
+   * @param string $value
+   */
+  public function setDatabase( $value ) {
+    $this->database( $value );
+  }
+  /**
+   * @since 1.2.0
+   *
+   * @return \mysqli
+   */
+  public function getLink() {
+    $this->connect();
+
+    return $this->_link;
   }
 }
