@@ -113,18 +113,24 @@ class Connection extends SqlConnection {
   }
 
   /**
+   * @since 1.2.0
+   *
    * @return string
    */
   public function getDatabase() {
     return $this->_database;
   }
   /**
+   * @since 1.2.0
+   *
    * @param string $value
    */
   public function setDatabase( $value ) {
     $this->database( $value );
   }
   /**
+   * @since 1.2.0
+   *
    * @return \mysqli
    */
   public function getLink() {
