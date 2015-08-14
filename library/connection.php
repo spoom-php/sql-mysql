@@ -85,7 +85,7 @@ class Connection extends Sql\Connection {
       } else {
 
         // select working database
-        $this->database( !empty( $this->_database ) ? $this->_database : $extension->option( $this->configuration . ':database!string' ) );
+        $this->setDatabase( !empty( $this->_database ) ? $this->_database : $extension->option( $this->configuration . ':database!string' ) );
 
         // set encoding
         @$this->_link->query( 'SET names ' . $extension->option( $this->configuration . ':encoding!string', 'utf8' ) );
@@ -103,16 +103,16 @@ class Connection extends Sql\Connection {
   /**
    * Select a database for the connection
    *
+   * @depricated use ->setDatabase()
+   *
    * @param string $name The database name to select
    *
    * @return $this
    * @throws Exception\System
    */
   protected function database( $name ) {
-
-    if( !$this->_link || @!$this->_link->select_db( $name ) ) throw new Exception\System( self::EXCEPTION_FAIL_DATABASE, [ $name ] );
-    else $this->_database = $name;
-
+    $this->setDatabase( $name );
+    
     return $this;
   }
 
@@ -128,9 +128,13 @@ class Connection extends Sql\Connection {
    * @since 1.2.0
    *
    * @param string $value
+   *
+   * @throws Exception\System
    */
   public function setDatabase( $value ) {
-    $this->database( $value );
+
+    if( !$this->_link || @!$this->_link->select_db( $value ) ) throw new Exception\System( self::EXCEPTION_FAIL_DATABASE, [ $value ] );
+    else $this->_database = $value;
   }
   /**
    * @since 1.2.0
