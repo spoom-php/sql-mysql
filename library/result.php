@@ -249,6 +249,8 @@ class Result extends Sql\Result {
   }
 
   /**
+   * @since 1.2.1
+   *
    * @return \mysqli_result|bool
    */
   public function getResult() {
