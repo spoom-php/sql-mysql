@@ -1,8 +1,8 @@
 <?php namespace Sql\Mysql;
 
-use Sql\Connection as SqlConnection;
 use Framework\Exception;
 use Framework\Extension;
+use Sql;
 
 /**
  * Class Connection
@@ -11,7 +11,7 @@ use Framework\Extension;
  * @property-read \mysqli $link     The mysqli connection link
  * @property      string  $database The selected database name
  */
-class Connection extends SqlConnection {
+class Connection extends Sql\Connection {
 
   /**
    * Unable to select the database
@@ -40,7 +40,7 @@ class Connection extends SqlConnection {
   public function disconnect() {
     if( $this->_link ) {
 
-      $this->_link->close();
+      @$this->_link->close();
       $this->_link = null;
     }
 
@@ -61,7 +61,7 @@ class Connection extends SqlConnection {
 
       // create the connection
       $host        = $extension->option( $this->configuration . ':host!string', 'localhost' );
-      $this->_link = new \mysqli(
+      $this->_link = @new \mysqli(
         $host,
         $extension->option( $this->configuration . ':user!string', ini_get( 'mysqli.default_user' ) ),
         $extension->option( $this->configuration . ':password!string', ini_get( 'mysqli.default_pw' ) ),
@@ -73,23 +73,27 @@ class Connection extends SqlConnection {
       // if there was an error, throw one
       if( !$this->_link || $this->_link->connect_errno ) {
 
-        throw ( new Exception\System( self::EXCEPTION_FAIL_CONNECT, [
+        // unset the link
+        $message     = $this->_link ? $this->_link->connect_error : 'Unknown';
+        $this->_link = null;
+
+        throw new Exception\System( self::EXCEPTION_FAIL_CONNECT, [
           'configuration' => $this->_configuration,
-          'message'       => $this->_link ? $this->_link->connect_error : 'Unknown'
-        ] ) )->log();
+          'message'       => $message
+        ] );
 
       } else {
 
         // select working database
-        $this->database( !empty( $this->_database ) ? $this->_database : $extension->option( $this->configuration . ':database!string' ) );
+        $this->setDatabase( !empty( $this->_database ) ? $this->_database : $extension->option( $this->configuration . ':database!string' ) );
 
         // set encoding
-        $this->_link->query( 'SET names ' . $extension->option( $this->configuration . ':encoding!string', 'utf8' ) );
+        @$this->_link->query( 'SET names ' . $extension->option( $this->configuration . ':encoding!string', 'utf8' ) );
 
         // timezone sync with the PHP
         $date     = new \DateTime( "now", new \DateTimeZone( $extension->option( $this->configuration . ':timezone!string', date_default_timezone_get() ) ) );
-        $timezone = sprintf( '%+d:%02d', floor( $date->getOffset() / 60 / 60 ), floor( abs( $date->getOffset() % 60 / 60 ) ) );
-        $this->_link->query( "SET time_zone = '{$this->_link->escape_string( $timezone )}'" );
+        $timezone = @$this->_link->escape_string( sprintf( '%+d:%02d', floor( $date->getOffset() / 60 / 60 ), floor( abs( $date->getOffset() % 60 / 60 ) ) ) );
+        @$this->_link->query( "SET time_zone = '{$timezone}'" );
       }
     }
 
@@ -99,16 +103,16 @@ class Connection extends SqlConnection {
   /**
    * Select a database for the connection
    *
+   * @depricated use ->setDatabase()
+   *
    * @param string $name The database name to select
    *
    * @return $this
    * @throws Exception\System
    */
   protected function database( $name ) {
-
-    if( !$this->_link || !$this->_link->select_db( $name ) ) throw ( new Exception\System( self::EXCEPTION_FAIL_DATABASE, [ $name ] ) )->log();
-    else $this->_database = $name;
-
+    $this->setDatabase( $name );
+    
     return $this;
   }
 
@@ -124,9 +128,13 @@ class Connection extends SqlConnection {
    * @since 1.2.0
    *
    * @param string $value
+   *
+   * @throws Exception\System
    */
   public function setDatabase( $value ) {
-    $this->database( $value );
+
+    if( !$this->_link || @!$this->_link->select_db( $value ) ) throw new Exception\System( self::EXCEPTION_FAIL_DATABASE, [ $value ] );
+    else $this->_database = $value;
   }
   /**
    * @since 1.2.0
@@ -134,7 +142,7 @@ class Connection extends SqlConnection {
    * @return \mysqli
    */
   public function getLink() {
-    $this->connect();
+    $this->connect( true );
 
     return $this->_link;
   }
