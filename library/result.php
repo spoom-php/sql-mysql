@@ -1,6 +1,6 @@
 <?php namespace Sql\Mysql;
 
-use Sql\Result as SqlResult;
+use Sql;
 
 /**
  * Class Result
@@ -8,7 +8,7 @@ use Sql\Result as SqlResult;
  *
  * @property-read \mysqli_result|bool $result
  */
-class Result extends SqlResult {
+class Result extends Sql\Result {
 
   /**
    * Indicate if the query return some result
@@ -16,7 +16,6 @@ class Result extends SqlResult {
    * @var bool
    */
   private $data;
-
   /**
    * Meta properties for the fields
    *
@@ -31,14 +30,16 @@ class Result extends SqlResult {
     parent::__construct( $command, $result, $exception, $rows, $insert_id );
 
     $this->data = is_object( $result );
-    $this->meta = $this->data ? $this->result->fetch_fields() : null;
+    $this->meta = $this->data && $result ? $this->getResult()->fetch_fields() : null;
   }
 
   /**
    * Free the stored result
    */
   public function free() {
-    if( $this->data ) $this->result->free();
+    if( $this->data ) {
+      @$this->getResult()->free();
+    }
 
     parent::free();
   }
@@ -47,7 +48,7 @@ class Result extends SqlResult {
    * @inheritdoc
    */
   public function get( $record = 0, $field = 0 ) {
-    if( !$this->data || $this->exception ) return null;
+    if( !$this->data || $this->getException() ) return null;
 
     if( is_string( $field ) ) $row = $this->getAssoc( $record );
     else $row = $this->getArray( $record );
@@ -72,126 +73,128 @@ class Result extends SqlResult {
    * @inheritdoc
    */
   public function getAssoc( $record = 0 ) {
-    if( !$this->data || $this->exception ) return null;
+    if( !$this->data || $this->getException() ) return null;
 
-    $result = $this->result;
-    @$result->data_seek( $record );
-
-    return $this->process( $result->fetch_assoc() );
+    $result = $this->getResult();
+    return @$result->data_seek( $record ) ? $this->process( @$result->fetch_assoc() ) : null;
   }
   /**
    * @inheritdoc
    */
   public function getAssocList( $index = null ) {
-    if( !$this->data || $this->exception ) return [ ];
+    if( !$this->data || $this->getException() ) return [ ];
 
-    $result = $this->result;
-    @$result->data_seek( 0 );
+    $result = $this->getResult();
+    if( @!$result->data_seek( 0 ) ) return [ ];
+    else {
 
-    $return_array = [ ];
-    if( $index === null ) while( $row = $result->fetch_assoc() ) $return_array[ ] = $this->process( $row );
-    else while( $row = $result->fetch_assoc() ) {
+      $return_array = [ ];
+      if( $index === null ) while( $row = @$result->fetch_assoc() ) $return_array[] = $this->process( $row );
+      else while( $row = @$result->fetch_assoc() ) {
 
-      $row = $this->process( $row );
-      if( !isset( $row[ $index ] ) ) $return_array[ ] = $row;
-      else {
-
-        $i = $row[ $index ];
-        if( !isset( $return_array[ $i ] ) ) $return_array[ $i ] = $row;
+        $row = $this->process( $row );
+        if( !isset( $row[ $index ] ) ) $return_array[] = $row;
         else {
 
-          if( !is_array( $return_array[ $i ] ) ) $return_array[ $i ] = [ $return_array[ $i ] ];
-          $return_array[ $i ][ ] = $row;
+          $i = $row[ $index ];
+          if( !isset( $return_array[ $i ] ) ) $return_array[ $i ] = $row;
+          else {
 
+            if( !is_array( $return_array[ $i ] ) ) $return_array[ $i ] = [ $return_array[ $i ] ];
+            $return_array[ $i ][] = $row;
+
+          }
         }
       }
-    }
 
-    return $return_array;
+      return $return_array;
+    }
   }
 
   /**
    * @inheritdoc
    */
   public function getObject( $record = 0 ) {
-    if( !$this->data || $this->exception ) return null;
+    if( !$this->data || $this->getException() ) return null;
 
-    $result = $this->result;
-    @$result->data_seek( $record );
-
-    return $this->process( $result->fetch_object() );
+    $result = $this->getResult();
+    return @$result->data_seek( $record ) ? $this->process( @$result->fetch_object() ) : null;
   }
   /**
    * @inheritdoc
    */
   public function getObjectList( $index = null ) {
-    if( !$this->data || $this->exception ) return [ ];
+    if( !$this->data || $this->getException() ) return [ ];
 
-    $result = $this->result;
-    @$result->data_seek( 0 );
+    $result = $this->getResult();
+    if( @$result->data_seek( 0 ) ) return [ ];
+    else {
 
-    $return_array = [ ];
-    if( $index === null ) while( $row = $result->fetch_object() ) $return_array[ ] = $this->process( $row );
-    else while( $row = $result->fetch_object() ) {
+      $return_array = [ ];
+      if( $index === null ) while( $row = @$result->fetch_object() ) $return_array[] = $this->process( $row );
+      else while( $row = @$result->fetch_object() ) {
 
-      $row = $this->process( $row );
-      if( !isset( $row->{$index} ) ) $return_array[ ] = $row;
-      else {
-
-        $i = $row->{$index};
-        if( !isset( $return_array[ $i ] ) ) $return_array[ $i ] = $row;
+        $row = $this->process( $row );
+        if( !isset( $row->{$index} ) ) $return_array[] = $row;
         else {
 
-          if( !is_array( $return_array[ $i ] ) ) $return_array[ $i ] = [ $return_array[ $i ] ];
-          $return_array[ $i ][ ] = $row;
+          $i = $row->{$index};
+          if( !isset( $return_array[ $i ] ) ) $return_array[ $i ] = $row;
+          else {
 
+            if( !is_array( $return_array[ $i ] ) ) $return_array[ $i ] = [ $return_array[ $i ] ];
+            $return_array[ $i ][] = $row;
+
+          }
         }
       }
-    }
 
-    return $return_array;
+      return $return_array;
+    }
   }
 
   /**
    * @inheritdoc
    */
   public function getArray( $record = 0 ) {
-    if( !$this->data || $this->exception ) return [ ];
+    if( !$this->data || $this->getException() ) return [ ];
+    else {
 
-    $result = $this->result;
-    @$result->data_seek( $record );
-
-    return $this->process( $result->fetch_row(), true );
+      $result = $this->getResult();
+      return @$result->data_seek( $record ) ? $this->process( @$result->fetch_row(), true ) : [ ];
+    }
   }
   /**
    * @inheritdoc
    */
   public function getArrayList( $index = null ) {
-    if( !$this->data || $this->exception ) return [ ];
+    if( !$this->data || $this->getException() ) return [ ];
+    else {
 
-    $result = $this->result;
-    @$result->data_seek( 0 );
+      $result = $this->getResult();
+      @$result->data_seek( 0 );
 
-    $return_array = [ ];
-    if( $index === null ) while( $row = $result->fetch_row() ) $return_array[ ] = $this->process( $row, true );
-    else while( $row = $result->fetch_row() ) {
+      $return_array = [ ];
+      if( $index === null ) while( $row = @$result->fetch_row() ) $return_array[] = $this->process( $row, true );
+      else while( $row = @$result->fetch_row() ) {
 
-      $row = $this->process( $row, true );
-      if( !isset( $row[ $index ] ) ) $return_array[ ] = $row;
-      else {
-
-        $i = $row[ $index ];
-        if( !isset( $return_array[ $i ] ) ) $return_array[ $i ] = $row;
+        $row = $this->process( $row, true );
+        if( !isset( $row[ $index ] ) ) $return_array[] = $row;
         else {
 
-          if( !is_array( $return_array[ $i ] ) ) $return_array[ $i ] = [ $return_array[ $i ] ];
-          $return_array[ $i ][ ] = $row;
+          $i = $row[ $index ];
+          if( !isset( $return_array[ $i ] ) ) $return_array[ $i ] = $row;
+          else {
 
+            if( !is_array( $return_array[ $i ] ) ) $return_array[ $i ] = [ $return_array[ $i ] ];
+            $return_array[ $i ][] = $row;
+
+          }
         }
       }
-    }
 
-    return $return_array;
+      return $return_array;
+    }
   }
 
   /**
@@ -243,5 +246,14 @@ class Result extends SqlResult {
     }
 
     return empty( $is_object ) ? $row : (object) $row;
+  }
+
+  /**
+   * @since 1.2.1
+   *
+   * @return \mysqli_result|bool
+   */
+  public function getResult() {
+    return parent::getResult();
   }
 }
