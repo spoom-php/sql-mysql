@@ -18,6 +18,32 @@ class Builder extends SqlBuilder {
    */
   const PATTERN_IDENTIFIER = '/^[a-z0-9\\$\\_]+$/i';
 
+  const CUSTOM_PARTITION   = 'partition';
+  const CUSTOM_SELECT      = 'select';
+  const CUSTOM_PROCEDURE   = 'procedure';
+  const CUSTOM_UNION       = 'union';
+  const CUSTOM_ONDUPLICATE = 'on duplicate';
+
+  const FLAG_LOWPRIORITY      = 'LOW_PRIORITY';
+  const FLAG_HIGHPRIORITY     = 'HIGH_PRIORITY';
+  const FLAG_IGNORE           = 'IGNORE';
+  const FLAG_DELAYED          = 'DELAYED';
+  const FLAG_ALL              = 'ALL';
+  const FLAG_DISTINCT         = 'DISTINCT';
+  const FLAG_DISTINCTROW      = 'DISTINCTROW';
+  const FLAG_MAXSTATEMENTTIME = 'MAX_STATEMENT_TIME';
+  const FLAG_STRAIGHTJOIN     = 'STRAIGHT_JOIN';
+  const FLAG_SMALLRESULT      = 'SQL_SMALL_RESULT';
+  const FLAG_BIGRESULT        = 'SQL_BIG_RESULT';
+  const FLAG_BUFFERRESULT     = 'SQL_BUFFER_RESULT';
+  const FLAG_CACHE            = 'SQL_CACHE';
+  const FLAG_NOCACHE          = 'SQL_NO_CACHE';
+  const FLAG_CALCFOUNDROWS    = 'SQL_CALC_FOUND_ROWS';
+  const FLAG_FORUPDATE        = 'FOR UPDATE';
+  const FLAG_LOCKINSHAREMODE  = 'LOCK IN SHARE MODE';
+  const FLAG_QUICK            = 'QUICK';
+  const FLAG_WITHROLLUP       = 'WITH ROLLUP';
+
   /**
    * Build SELECT command based on builder data
    *
@@ -30,14 +56,15 @@ class Builder extends SqlBuilder {
 
     // build starter flags
     $command .= $this->buildFlags( [
-      'ALL', 'DISTINCT', 'DISTINCTROW', 'HIGH_PRIORITY', 'MAX_STATEMENT_TIME', 'STRAIGHT_JOIN', 'SQL_SMALL_RESULT',
-      'SQL_BIG_RESULT', 'SQL_BUFFER_RESULT', 'SQL_CACHE', 'SQL_NO_CACHE', 'SQL_CALC_FOUND_ROWS'
+      static::FLAG_ALL, static::FLAG_DISTINCT, static::FLAG_DISTINCTROW, static::FLAG_HIGHPRIORITY,
+      static::FLAG_MAXSTATEMENTTIME, static::FLAG_STRAIGHTJOIN, static::FLAG_SMALLRESULT, static::FLAG_BIGRESULT,
+      static::FLAG_BUFFERRESULT, static::FLAG_CACHE, static::FLAG_NOCACHE, static::FLAG_CALCFOUNDROWS
     ] );
 
     // adding fields
     $tmp = [ ];
     foreach( $this->fields as $alias => $name ) {
-      $tmp[ ] = $this->buildExpression( $name, $alias );
+      $tmp[] = $this->buildExpression( $name, $alias );
     }
     $command .= count( $tmp ) == 0 ? ' *' : implode( ',', $tmp );
 
@@ -45,7 +72,7 @@ class Builder extends SqlBuilder {
     $tmp    = [ ];
     $tables = $this->tables;
     foreach( $tables as $alias => $name ) if( !is_array( $name ) ) {
-      $tmp[ ] = $this->buildExpression( $name, $alias );
+      $tmp[] = $this->buildExpression( $name, $alias );
     }
     $command .= ' FROM' . implode( ',', $tmp );
 
@@ -55,8 +82,8 @@ class Builder extends SqlBuilder {
     }
 
     // add partitions from custom
-    if( !empty( $this->customs[ 'partition' ] ) ) {
-      $command .= ' PARTITION (' . implode( ',', $this->customs[ 'partition' ] ) . ')';
+    if( !empty( $this->customs[ static::CUSTOM_PARTITION ] ) ) {
+      $command .= ' PARTITION (' . implode( ',', $this->customs[ static::CUSTOM_PARTITION ] ) . ')';
     }
 
     // adding where
@@ -64,7 +91,7 @@ class Builder extends SqlBuilder {
 
     // adding groups
     $command .= $this->buildList( $this->groups, 'GROUP BY' );
-    $command .= $this->buildFlags( [ 'WITH ROLLUP' ] );
+    $command .= $this->buildFlags( [ static::FLAG_WITHROLLUP ] );
 
     // adding having
     $command .= $this->buildFilter( 'having' );
@@ -76,15 +103,16 @@ class Builder extends SqlBuilder {
     $command .= $this->buildLimit( $this->limit );
 
     // add procedure from custom
-    if( !empty( $this->customs[ 'procedure' ] ) ) {
-      $command .= " PROCEDURE {$this->customs['procedure'][0]}(" . implode( ',', array_slice( $this->customs[ 'procedure' ], 1 ) ) . ')';
+    if( !empty( $this->customs[ static::CUSTOM_PROCEDURE ] ) ) {
+      $tmp = $this->customs[ static::CUSTOM_PROCEDURE ];
+      $command .= " PROCEDURE {$tmp[0]}(" . implode( ',', array_slice( $tmp, 1 ) ) . ')';
     }
-    $command .= $this->buildFlags( [ 'FOR UPDATE', 'LOCK IN SHARE MODE' ] );
+    $command .= $this->buildFlags( [ static::FLAG_FORUPDATE, static::FLAG_LOCKINSHAREMODE ] );
 
     // adding union custom
     $customs = $this->customs;
-    if( isset( $customs[ 'union' ] ) ) {
-      foreach( $customs[ 'union' ] as $union_data ) {
+    if( isset( $customs[ static::CUSTOM_UNION ] ) ) {
+      foreach( $customs[ static::CUSTOM_UNION ] as $union_data ) {
         $select = is_array( $union_data ) && count( $union_data ) > 1 ? $union_data[ 1 ] : $union_data;
 
         if( is_string( $select ) || $select instanceof Builder ) {
@@ -107,8 +135,8 @@ class Builder extends SqlBuilder {
     $command = 'INSERT';
 
     // adding flags
-    $flags = [ 'LOW_PRIORITY', 'HIGH_PRIORITY', 'IGNORE' ];
-    if( !isset( $this->customs[ 'select' ] ) ) array_splice( $flags, 1, 0, 'DELAYED' );
+    $flags = [ static::FLAG_LOWPRIORITY, static::FLAG_HIGHPRIORITY, static::FLAG_IGNORE ];
+    if( !isset( $this->customs[ static::CUSTOM_SELECT ] ) ) array_splice( $flags, 1, 0, static::FLAG_DELAYED );
     $command .= $this->buildFlags( $flags );
 
     // adding the first table
@@ -118,19 +146,19 @@ class Builder extends SqlBuilder {
     }
 
     // add partitions from custom
-    if( !empty( $this->customs[ 'partition' ] ) ) {
-      $command .= ' PARTITION (' . implode( ',', $this->customs[ 'partition' ] ) . ')';
+    if( !empty( $this->customs[ static::CUSTOM_PARTITION ] ) ) {
+      $command .= ' PARTITION (' . implode( ',', $this->customs[ static::CUSTOM_PARTITION ] ) . ')';
     }
 
     // add table fields
     $tmp = [ ];
-    foreach( $this->fields as $alias => $definition ) $tmp[ ] = ' ' . $this->dbq->quoteName( $alias );
+    foreach( $this->fields as $alias => $definition ) $tmp[] = ' ' . $this->dbq->quoteName( $alias );
     $command .= '(' . implode( ',', $tmp ) . ' )';
 
     // add custom select command if any (and ignore simple and batch insertion)
-    if( isset( $this->customs[ 'select' ] ) ) {
+    if( isset( $this->customs[ static::CUSTOM_SELECT ] ) ) {
 
-      $select = $this->customs[ 'select' ][ 0 ];
+      $select = $this->customs[ static::CUSTOM_SELECT ][ 0 ];
       $command .= ' ' . $select;
 
       // adding fields for batch (mass) insertion
@@ -144,7 +172,7 @@ class Builder extends SqlBuilder {
 
       $value_array = [ ];
       foreach( $this->fields as $alias => $definition ) {
-        $value_array[ ] = $this->buildExpression( $alias == $definition ? "{field_{$alias}}" : $definition );
+        $value_array[] = $this->buildExpression( $alias == $definition ? "{field_{$alias}}" : $definition );
       }
       $command .= ' VALUES(' . implode( ',', $value_array ) . ' )';
 
@@ -156,8 +184,8 @@ class Builder extends SqlBuilder {
     }
 
     // add duplicate conditions
-    if( isset( $this->customs[ 'on duplicate' ] ) ) {
-      $command .= ' ON DUPLICATE KEY UPDATE ' . implode( ',', $this->customs[ 'on duplicate' ] );
+    if( isset( $this->customs[ static::CUSTOM_ONDUPLICATE ] ) ) {
+      $command .= ' ON DUPLICATE KEY UPDATE ' . implode( ',', $this->customs[ static::CUSTOM_ONDUPLICATE ] );
     }
 
     // return the builded command
@@ -174,12 +202,12 @@ class Builder extends SqlBuilder {
     $command = 'UPDATE';
 
     // adding flags
-    $command .= $this->buildFlags( [ 'LOW_PRIORITY', 'IGNORE' ] );
+    $command .= $this->buildFlags( [ static::FLAG_LOWPRIORITY, static::FLAG_IGNORE ] );
 
     // adding tables
     $tmp = [ ];
     foreach( $this->tables as $alias => $definition ) if( !is_array( $definition ) ) {
-      $tmp[ ] = $this->buildExpression( $definition, $alias );
+      $tmp[] = $this->buildExpression( $definition, $alias );
     }
     $command .= implode( ',', $tmp );
 
@@ -192,7 +220,7 @@ class Builder extends SqlBuilder {
     $fields      = $this->fields;
     $field_array = [ ];
     foreach( $fields as $alias => $definition ) {
-      $field_array[ ] = $this->buildOperation( $definition == $alias ? "{field_{$alias}}" : $definition, $alias, '=' );
+      $field_array[] = $this->buildOperation( $definition == $alias ? "{field_{$alias}}" : $definition, $alias, '=' );
     }
     $command .= ' SET' . implode( ',', $field_array );
 
@@ -232,12 +260,12 @@ class Builder extends SqlBuilder {
     $multi = count( $this->tables ) > 1;
 
     // adding flags
-    $command .= $this->buildFlags( [ 'LOW_PRIORITY', 'QUICK', 'IGNORE' ] );
+    $command .= $this->buildFlags( [ static::FLAG_LOWPRIORITY, static::FLAG_QUICK, static::FLAG_IGNORE ] );
 
     // adding fields that is tables in this context of Builder
     if( $multi ) {
 
-      foreach( $this->fields as $alias => $name ) $field_array[ ] = $this->buildExpression( $name, $alias );
+      foreach( $this->fields as $alias => $name ) $field_array[] = $this->buildExpression( $name, $alias );
       $command .= empty( $field_array ) ? '' : implode( ',', $field_array );
     }
 
@@ -246,7 +274,7 @@ class Builder extends SqlBuilder {
     foreach( $this->tables as $alias => $name ) if( !is_array( $name ) ) {
 
       // alias not available in single table
-      $tmp[ ] = $this->buildExpression( $name, $multi ? $alias : $name );
+      $tmp[] = $this->buildExpression( $name, $multi ? $alias : $name );
     }
 
     // add tables
@@ -261,8 +289,8 @@ class Builder extends SqlBuilder {
     }
 
     // add partitions in single table syntax
-    if( !$multi && !empty( $this->customs[ 'partition' ] ) ) {
-      $command .= ' PARTITION (' . implode( ',', $this->customs[ 'partition' ] ) . ')';
+    if( !$multi && !empty( $this->customs[ static::CUSTOM_PARTITION ] ) ) {
+      $command .= ' PARTITION (' . implode( ',', $this->customs[ static::CUSTOM_PARTITION ] ) . ')';
     }
 
     // adding filters
@@ -372,7 +400,7 @@ class Builder extends SqlBuilder {
 
     $result = [ ];
     foreach( $input as $data ) {
-      $result[ ] = $this->buildExpression( $data[ 0 ] ) . ( isset( $data[ 1 ] ) ? ( ' ' . strtoupper( $data[ 1 ] ) ) : '' );
+      $result[] = $this->buildExpression( $data[ 0 ] ) . ( isset( $data[ 1 ] ) ? ( ' ' . strtoupper( $data[ 1 ] ) ) : '' );
     }
 
     if( !count( $input ) ) $result = '';
