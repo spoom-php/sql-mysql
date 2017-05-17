@@ -236,7 +236,10 @@ class Result extends Sql\Result {
           case MYSQLI_TYPE_SHORT:
           case MYSQLI_TYPE_TINY:
 
-            $data = is_null( $data ) ? null : (int) $data;
+            if( is_null( $data ) ) $data = null;
+            else if( $data < PHP_INT_MAX && $data > PHP_INT_MIN ) $data = (int) $data;
+            else ; // leave the value as is
+            
             break;
         }
 

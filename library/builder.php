@@ -141,7 +141,7 @@ class Builder extends SqlBuilder {
 
     // adding the first table
     foreach( $this->tables as $definition ) if( !is_array( $definition ) ) {
-      $command .= ' ' . $this->dbq->quoteName( $definition );
+      $command .= ' ' . $this->buildExpression( $definition );
       break;
     }
 
@@ -152,7 +152,7 @@ class Builder extends SqlBuilder {
 
     // add table fields
     $tmp = [ ];
-    foreach( $this->fields as $alias => $definition ) $tmp[] = ' ' . $this->dbq->quoteName( $alias );
+    foreach( $this->fields as $alias => $definition ) $tmp[] = ' ' . $this->buildExpression( $alias );
     $command .= '(' . implode( ',', $tmp ) . ' )';
 
     // add custom select command if any (and ignore simple and batch insertion)
