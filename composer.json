@@ -1,0 +1,23 @@
+{
+  "name": "spoom-php/sql-mysql",
+  "description": "MySQL support for Spoom Framework",
+  "keywords": [ "spoom", "sql", "mysql", "database", "driver" ],
+  "type": "spoom-extension",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Nagy Samu"
+    }
+  ],
+
+  "require": {
+    "php": "^7.1.0",
+    "spoom-php/composer": "^1.0.0",
+    "spoom-php/core": "@dev",
+    "spoom-php/sql": "@dev"
+  },
+
+  "autoload": {
+    "psr-4": { "Spoom\\Sql\\MySQL\\": "src/extension/" }
+  }
+}

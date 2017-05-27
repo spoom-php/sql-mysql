@@ -1,10 +1,9 @@
-<?php namespace Sql\Mysql;
+<?php namespace Spoom\Sql\MySQL;
 
-use Sql;
+use Spoom\Sql;
 
 /**
  * Class Result
- * @package Sql\Mysql
  *
  * @property-read \mysqli_result|bool $result
  */
@@ -23,11 +22,9 @@ class Result extends Sql\Result {
    */
   private $meta;
 
-  /**
-   * @inheritdoc
-   */
-  public function __construct( $command, $result = false, $exception = null, $rows = 0, $insert_id = null ) {
-    parent::__construct( $command, $result, $exception, $rows, $insert_id );
+  //
+  public function __construct( string $statement, $result = null, ?\Throwable $exception = null, int $rows = 0, ?int $insert_id = null ) {
+    parent::__construct( $statement, $result, $exception, $rows, $insert_id );
 
     $this->data = is_object( $result );
     $this->meta = $this->data && $result ? $this->getResult()->fetch_fields() : null;
@@ -44,10 +41,8 @@ class Result extends Sql\Result {
     parent::free();
   }
 
-  /**
-   * @inheritdoc
-   */
-  public function get( $record = 0, $field = 0 ) {
+  //
+  public function get( int $record = 0, int $field = 0 ) {
     if( !$this->data || $this->getException() ) return null;
 
     if( is_string( $field ) ) $row = $this->getAssoc( $record );
@@ -55,40 +50,34 @@ class Result extends Sql\Result {
 
     return isset( $row[ $field ] ) ? $row[ $field ] : null;
   }
-  /**
-   * @inheritdoc
-   */
-  public function getList( $field = 0 ) {
+  //
+  public function getList( int $field = 0 ): array {
     $tmp     = $this->getArrayList();
-    $returns = [ ];
+    $returns = [];
 
     foreach( $tmp as $v ) {
-      $returns[ ] = $v[ $field ];
+      $returns[] = $v[ $field ];
     }
 
     return $returns;
   }
 
-  /**
-   * @inheritdoc
-   */
-  public function getAssoc( $record = 0 ) {
+  //
+  public function getAssoc( int $record = 0 ): array {
     if( !$this->data || $this->getException() ) return null;
 
     $result = $this->getResult();
     return @$result->data_seek( $record ) ? $this->process( @$result->fetch_assoc() ) : null;
   }
-  /**
-   * @inheritdoc
-   */
-  public function getAssocList( $index = null ) {
-    if( !$this->data || $this->getException() ) return [ ];
+  //
+  public function getAssocList( $index = null ): array {
+    if( !$this->data || $this->getException() ) return [];
 
     $result = $this->getResult();
-    if( @!$result->data_seek( 0 ) ) return [ ];
+    if( @!$result->data_seek( 0 ) ) return [];
     else {
 
-      $return_array = [ ];
+      $return_array = [];
       if( $index === null ) while( $row = @$result->fetch_assoc() ) $return_array[] = $this->process( $row );
       else while( $row = @$result->fetch_assoc() ) {
 
@@ -111,26 +100,22 @@ class Result extends Sql\Result {
     }
   }
 
-  /**
-   * @inheritdoc
-   */
-  public function getObject( $record = 0 ) {
+  //
+  public function getObject( int $record = 0 ) {
     if( !$this->data || $this->getException() ) return null;
 
     $result = $this->getResult();
     return @$result->data_seek( $record ) ? $this->process( @$result->fetch_object() ) : null;
   }
-  /**
-   * @inheritdoc
-   */
-  public function getObjectList( $index = null ) {
-    if( !$this->data || $this->getException() ) return [ ];
+  //
+  public function getObjectList( $index = null ): array {
+    if( !$this->data || $this->getException() ) return [];
 
     $result = $this->getResult();
-    if( @$result->data_seek( 0 ) ) return [ ];
+    if( @$result->data_seek( 0 ) ) return [];
     else {
 
-      $return_array = [ ];
+      $return_array = [];
       if( $index === null ) while( $row = @$result->fetch_object() ) $return_array[] = $this->process( $row );
       else while( $row = @$result->fetch_object() ) {
 
@@ -153,28 +138,24 @@ class Result extends Sql\Result {
     }
   }
 
-  /**
-   * @inheritdoc
-   */
-  public function getArray( $record = 0 ) {
-    if( !$this->data || $this->getException() ) return [ ];
+  //
+  public function getArray( int $record = 0 ): array {
+    if( !$this->data || $this->getException() ) return [];
     else {
 
       $result = $this->getResult();
-      return @$result->data_seek( $record ) ? $this->process( @$result->fetch_row(), true ) : [ ];
+      return @$result->data_seek( $record ) ? $this->process( @$result->fetch_row(), true ) : [];
     }
   }
-  /**
-   * @inheritdoc
-   */
-  public function getArrayList( $index = null ) {
-    if( !$this->data || $this->getException() ) return [ ];
+  //
+  public function getArrayList( $index = null ): array {
+    if( !$this->data || $this->getException() ) return [];
     else {
 
       $result = $this->getResult();
       @$result->data_seek( 0 );
 
-      $return_array = [ ];
+      $return_array = [];
       if( $index === null ) while( $row = @$result->fetch_row() ) $return_array[] = $this->process( $row, true );
       else while( $row = @$result->fetch_row() ) {
 
@@ -205,7 +186,7 @@ class Result extends Sql\Result {
    *
    * @return array|object
    */
-  private function process( $row, $indexed = false ) {
+  private function process( $row, bool $indexed = false ) {
 
     // process only when meta is available
     if( !empty( $this->meta ) ) {
@@ -239,7 +220,7 @@ class Result extends Sql\Result {
             if( is_null( $data ) ) $data = null;
             else if( $data < PHP_INT_MAX && $data > PHP_INT_MIN ) $data = (int) $data;
             else ; // leave the value as is
-            
+
             break;
         }
 
