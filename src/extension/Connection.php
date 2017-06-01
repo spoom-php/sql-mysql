@@ -1,7 +1,6 @@
 <?php namespace Spoom\Sql\MySQL;
 
 use Spoom\Core\Exception;
-use Spoom\Core\Helper\Text;
 use Spoom\Sql;
 use Spoom\Sql\StatementInterface;
 use Spoom\Sql\TransactionInterface;
@@ -12,6 +11,11 @@ use Spoom\Sql\TransactionInterface;
  * @property-read \mysqli $resource
  */
 class Connection extends Sql\Connection {
+
+  /**
+   * @var static[]
+   */
+  protected static $INSTANCE = [];
 
   /**
    * Host and port definition
@@ -49,14 +53,31 @@ class Connection extends Sql\Connection {
    */
   protected $_resource;
 
-  public function __construct( string $uri, ?string $user, ?string $password, string $database = '', array $meta = [] ) {
-    $this->_uri = strpos( $uri, ':' ) === false ? ( $uri . ':' . ini_get( "mysqli.default_port" ) ) : $uri;
-    $this->setAuthentication( $user ?? ini_get( 'mysqli.default_user' ), $password );
+  /**
+   * @param string      $uri
+   * @param string      $user
+   * @param null|string $password
+   * @param string      $database
+   * @param array       $option
+   */
+  public function __construct( string $uri, string $user, ?string $password, string $database = '', array $option = [] ) {
+
+    $this->_uri = strpos( $uri, ':' ) === false ? ( $uri . ':3306' ) : $uri;
+    $this->setAuthentication( $user, $password );
     $this->setDatabase( $database );
 
-    $this->setOption( $meta );
+    $this->setOption( $option );
   }
 
+  //
+  function __clone() {
+
+    // reset internal connection state
+    $this->_resource    = null;
+    $this->_transaction = null;
+  }
+
+  //
   public function statement(): StatementInterface {
     return new Statement( $this );
   }
@@ -69,7 +90,7 @@ class Connection extends Sql\Connection {
 
     $query = '';
     foreach( $statements as $i => $tmp ) {
-      $statements[ $i ] = Text::apply( $tmp, $context ) . static::CHARACTER_SEPARATOR;
+      $statements[ $i ] = $this->apply( $tmp, $context ) . static::CHARACTER_SEPARATOR;
       $query            .= $statements[ $i ];
     }
 
@@ -99,6 +120,7 @@ class Connection extends Sql\Connection {
     // create and return the result object
     return is_array( $statement ) ? $result_list : ( !empty( $statement ) ? $result_list[ 0 ] : null );
   }
+  //
   public function escape( string $text ): string {
     return $this->getResource()->escape_string( (string) $text );
   }
@@ -114,8 +136,7 @@ class Connection extends Sql\Connection {
       $password = null;
       $user     = $this->getAuthentication( $password );
 
-      $resource = mysqli_init();
-      if( !$resource ) ; // FIXME throw
+      if( !function_exists( 'mysqli_init' ) || !( $resource = mysqli_init() ) ) throw new \RuntimeException( 'Missing PHP extension: mysqli' );
       else try {
 
         // TODO apply options to the resource
@@ -123,7 +144,7 @@ class Connection extends Sql\Connection {
 
         // connect (for real..)
         // TODO add support for socket
-        if( @!$resource->real_connect( $host, $user, $password, $this->getDatabase(), $port ) ) {
+        if( @!mysqli_real_connect( $resource, $host, $user, $password, $this->getDatabase(), $port ) ) {
           throw static::exception( $resource );
         }
 
@@ -158,6 +179,14 @@ class Connection extends Sql\Connection {
     return $this;
   }
 
+  /**
+   * Apply option to a connection resource
+   *
+   * @param string  $name
+   * @param \mysqli $resource
+   *
+   * @throws Sql\ConnectionOptionException
+   */
   protected function option( $name, \mysqli $resource ) {
 
     $option = $this->getOption( $name );
@@ -214,9 +243,11 @@ class Connection extends Sql\Connection {
     $this->user     = $user;
     $this->password = $password;
   }
+  //
   public function getOption( ?string $name = null, $default = null ) {
     return isset( $name ) ? ( $this->_option[ $name ]??$default ) : $this->_option;
   }
+  //
   public function setOption( $value, ?string $name = null ) {
 
     $value = $name ? [ $name => $value ] : $value;
@@ -261,7 +292,38 @@ class Connection extends Sql\Connection {
     return $this->_resource;
   }
 
+  /**
+   * Create exception from a connection resource
+   *
+   * @param \mysqli $resource
+   *
+   * @return \mysqli_sql_exception|null
+   */
   public static function exception( \mysqli $resource ) {
     return $resource->errno ? new \mysqli_sql_exception( $resource->error, $resource->errno ) : null;
+  }
+  /**
+   * @param string $configuration
+   * @param bool   $force
+   *
+   * @return static
+   * @throws \RuntimeException
+   */
+  public static function instance( string $configuration = 'default', $force = false ) {
+
+    if( $force || !isset( static::$INSTANCE[ $configuration ] ) ) {
+
+      $mysql = Extension::instance()->getConfiguration();
+      if( !isset( $mysql[ 'connection:' . $configuration ] ) ) throw new \RuntimeException( "Missing MySQL configuration: {$configuration}" );
+      else static::$INSTANCE[ $configuration ] = new static(
+        $mysql[ "connection:{$configuration}.host" ],
+        $mysql[ "connection:{$configuration}.user" ],
+        $mysql[ "connection:{$configuration}.password" ],
+        $mysql[ "connection:{$configuration}.database" ],
+        $mysql[ "connection:{$configuration}.option!array" ]
+      );
+    }
+
+    return static::$INSTANCE[ $configuration ];
   }
 }

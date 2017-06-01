@@ -16,8 +16,22 @@
     "spoom-php/core": "@dev",
     "spoom-php/sql": "@dev"
   },
+  "require-dev": {
+    "phpunit/phpunit": "^6.0"
+  },
 
   "autoload": {
     "psr-4": { "Spoom\\Sql\\MySQL\\": "src/extension/" }
+  },
+  "autoload-dev": {
+    "psr-4": { "Spoom\\Sql\\MySQL\\": "test/" }
+  },
+
+  "extra": {
+    "spoom": {
+      "public": {
+        "src/configuration/": "spoom-sql-mysql/configuration/"
+      }
+    }
   }
 }
