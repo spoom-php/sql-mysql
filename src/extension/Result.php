@@ -22,6 +22,13 @@ class Result extends Sql\Result {
    */
   private $meta;
 
+  /**
+   * Convert field values based on their types
+   *
+   * @var bool
+   */
+  private $_convert = true;
+
   //
   public function __construct( string $statement, $result = null, ?\Throwable $exception = null, int $rows = 0, ?int $insert_id = null ) {
     parent::__construct( $statement, $result, $exception, $rows, $insert_id );
@@ -189,7 +196,7 @@ class Result extends Sql\Result {
   private function process( $row, bool $indexed = false ) {
 
     // process only when meta is available
-    if( !empty( $this->meta ) ) {
+    if( $this->isConvert() && !empty( $this->meta ) ) {
 
       // preprocess the row
       $is_object = is_object( $row );
@@ -207,7 +214,7 @@ class Result extends Sql\Result {
           case MYSQLI_TYPE_DOUBLE:
           case MYSQLI_TYPE_FLOAT:
 
-            $data = is_null( $data ) ? null : (float) $data;
+            $data = $data !== null ? (float) $data : null;
             break;
 
           // integer types
@@ -218,8 +225,9 @@ class Result extends Sql\Result {
           case MYSQLI_TYPE_TINY:
 
             if( is_null( $data ) ) $data = null;
-            else if( $data < PHP_INT_MAX && $data > PHP_INT_MIN ) $data = (int) $data;
-            else ; // leave the value as is
+            else if( $data < PHP_INT_MAX && $data > PHP_INT_MIN ) {
+              $data = (int) $data;
+            }
 
             break;
         }
@@ -239,5 +247,18 @@ class Result extends Sql\Result {
    */
   public function getResult() {
     return parent::getResult();
+  }
+
+  /**
+   * @return bool
+   */
+  public function isConvert(): bool {
+    return $this->_convert;
+  }
+  /**
+   * @param bool $value
+   */
+  public function setConvert( bool $value ) {
+    $this->_convert = $value;
   }
 }

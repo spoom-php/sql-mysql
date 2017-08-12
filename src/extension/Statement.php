@@ -1,6 +1,7 @@
 <?php namespace Spoom\Sql\MySQL;
 
 use Spoom\Sql;
+use Spoom\Sql\ConnectionInterface;
 
 /**
  * Class Statement
@@ -9,13 +10,6 @@ use Spoom\Sql;
  * TODO add support for flags that unset other flags
  */
 class Statement extends Sql\Statement {
-
-  /**
-   * Pattern for MySQL identifier names
-   *
-   * @since 1.1.2
-   */
-  const PATTERN_IDENTIFIER = '/^[a-z0-9\\$\\_]+$/i';
 
   const CUSTOM_PARTITION   = 'partition';
   const CUSTOM_SELECT      = 'select';
@@ -43,18 +37,33 @@ class Statement extends Sql\Statement {
   const FLAG_QUICK            = 'QUICK';
   const FLAG_WITHROLLUP       = 'WITH ROLLUP';
 
+  public function __construct( ConnectionInterface $connection, $context = [] ) {
+    parent::__construct( $connection, $context );
+
+    // enable MySQL custom features
+    $this->supportCustom( [
+      static::CUSTOM_PARTITION,
+      static::CUSTOM_ONDUPLICATE,
+      static::CUSTOM_PROCEDURE,
+      static::CUSTOM_SELECT,
+      static::CUSTOM_UNION
+    ] );
+  }
+
   /**
-   * Build SELECT command based on builder data
+   * Build SELECT command based on statement data
    *
    * http://dev.mysql.com/doc/refman/5.7/en/select.html
    *
    * @return string
    */
   public function getSelect() {
+
+    $context = $this->getContext();
     $command = 'SELECT';
 
     // build starter flags
-    $command .= $this->buildFlags( [
+    $command .= $this->renderFlag( [
       static::FLAG_ALL, static::FLAG_DISTINCT, static::FLAG_DISTINCTROW, static::FLAG_HIGHPRIORITY,
       static::FLAG_MAXSTATEMENTTIME, static::FLAG_STRAIGHTJOIN, static::FLAG_SMALLRESULT, static::FLAG_BIGRESULT,
       static::FLAG_BUFFERRESULT, static::FLAG_CACHE, static::FLAG_NOCACHE, static::FLAG_CALCFOUNDROWS
@@ -62,61 +71,50 @@ class Statement extends Sql\Statement {
 
     // adding fields
     $tmp = [];
-    foreach( $this->field_list as $alias => $name ) {
-      $tmp[] = $this->buildExpression( $name, $alias );
+    foreach( $this->getField() as $alias => $field ) {
+
+      $index = static::CONTEXT_FIELD . '.0.' . $alias;
+      $tmp[] = $this->renderAlias( isset( $context[ $index ] ) ? "{{$index}}" : $field, $alias );
     }
     $command .= count( $tmp ) == 0 ? ' *' : implode( ',', $tmp );
 
-    // adding tables
-    $tmp    = [];
-    $tables = $this->table_list;
-    foreach( $tables as $alias => $name ) if( !is_array( $name ) ) {
-      $tmp[] = $this->buildExpression( $name, $alias );
-    }
-    $command .= ' FROM' . implode( ',', $tmp );
-
-    // adding joins
-    foreach( $tables as $alias => $data ) if( is_array( $data ) ) {
-      $command .= ' ' . strtoupper( $data[ 'type' ] ) . ' JOIN' . $this->buildExpression( $data[ 'definition' ], $alias ) . ' ON ' . $data[ 'condition' ];
+    // adding tables (with joins)
+    if( !empty( $tmp = $this->renderTableList() ) ) {
+      $command .= ' FROM' . $tmp;
+      $command .= $this->renderTableJoinList();
     }
 
     // add partitions from custom
-    if( !empty( $this->custom_list[ static::CUSTOM_PARTITION ] ) ) {
-      $command .= ' PARTITION (' . implode( ',', $this->custom_list[ static::CUSTOM_PARTITION ] ) . ')';
+    if( ( $tmp = $this->getCustom( static::CUSTOM_PARTITION ) ) ) {
+      $command .= ' PARTITION (' . implode( ',', $tmp ) . ')';
     }
 
     // adding where
-    $command .= $this->buildFilter( 'where' );
+    $command .= $this->renderFilterList( static::FILTER_SIMPLE );
 
     // adding groups
-    $command .= $this->buildList( $this->group_list, 'GROUP BY' );
-    $command .= $this->buildFlags( [ static::FLAG_WITHROLLUP ] );
+    $command .= $this->renderList( $this->getGroup(), 'GROUP BY' );
+    $command .= $this->renderFlag( [ static::FLAG_WITHROLLUP ] );
 
     // adding having
-    $command .= $this->buildFilter( 'having' );
+    $command .= $this->renderFilterList( static::FILTER_GROUP );
 
-    // adding orders
-    $command .= $this->buildList( $this->order_list, 'ORDER BY' );
-
-    // adding limit
-    $command .= $this->buildLimit( $this->limit );
+    // adding orders, limit
+    $command .= $this->renderList( $this->getSort(), 'ORDER BY' );
+    $command .= $this->renderLimit();
 
     // add procedure from custom
-    if( !empty( $this->custom_list[ static::CUSTOM_PROCEDURE ] ) ) {
-      $tmp     = $this->custom_list[ static::CUSTOM_PROCEDURE ];
+    if( ( $tmp = $this->getCustom( static::CUSTOM_PROCEDURE ) ) ) {
       $command .= " PROCEDURE {$tmp[0]}(" . implode( ',', array_slice( $tmp, 1 ) ) . ')';
     }
-    $command .= $this->buildFlags( [ static::FLAG_FORUPDATE, static::FLAG_LOCKINSHAREMODE ] );
+    $command .= $this->renderFlag( [ static::FLAG_FORUPDATE, static::FLAG_LOCKINSHAREMODE ] );
 
     // adding union custom
-    $customs = $this->custom_list;
-    if( isset( $customs[ static::CUSTOM_UNION ] ) ) {
-      foreach( $customs[ static::CUSTOM_UNION ] as $union_data ) {
-        $select = is_array( $union_data ) && count( $union_data ) > 1 ? $union_data[ 1 ] : $union_data;
+    if( ( $tmp = $this->getCustom( static::CUSTOM_UNION ) ) ) {
+      foreach( $tmp as $union_data ) {
 
-        if( is_string( $select ) || $select instanceof Statement ) {
-          $command .= ' UNION ' . ( is_array( $union_data ) ? ( strtoupper( $union_data[ 0 ] ) . ' ' ) : '' ) . $select;
-        }
+        $select  = is_array( $union_data ) && count( $union_data ) > 1 ? $union_data[ 1 ] : $union_data;
+        $command .= ' UNION ' . ( is_array( $union_data ) ? ( strtoupper( $union_data[ 0 ] ) . ' ' ) : '' ) . $select;
       }
     }
 
@@ -124,117 +122,111 @@ class Statement extends Sql\Statement {
     return $command;
   }
   /**
-   * Build INSERT command based on builder data
+   * Build INSERT command based on statement data
    *
    * http://dev.mysql.com/doc/refman/5.7/en/insert.html
    *
    * @return string
    */
   public function getInsert() {
-    $command = 'INSERT';
+
     $context = $this->getContext();
+    $command = 'INSERT';
 
     // adding flags
     $flags = [ static::FLAG_LOWPRIORITY, static::FLAG_HIGHPRIORITY, static::FLAG_IGNORE ];
-    if( !isset( $this->custom_list[ static::CUSTOM_SELECT ] ) ) array_splice( $flags, 1, 0, static::FLAG_DELAYED );
-    $command .= $this->buildFlags( $flags );
+    if( !$this->getCustom( static::CUSTOM_SELECT ) ) array_splice( $flags, 1, 0, static::FLAG_DELAYED );
+    $command .= $this->renderFlag( $flags );
 
     // adding the first table
-    foreach( $this->table_list as $definition ) if( !is_array( $definition ) ) {
-      $command .= ' ' . $this->buildExpression( $definition );
+    foreach( $this->getTable() as $table ) if( empty( $table[ 'filter' ] ) ) {
+      $command .= ' ' . $table[ 'definition' ];
       break;
     }
 
     // add partitions from custom
-    if( !empty( $this->custom_list[ static::CUSTOM_PARTITION ] ) ) {
-      $command .= ' PARTITION (' . implode( ',', $this->custom_list[ static::CUSTOM_PARTITION ] ) . ')';
+    if( ( $tmp = $this->getCustom( static::CUSTOM_PARTITION ) ) ) {
+      $command .= ' PARTITION (' . implode( ',', $tmp ) . ')';
     }
 
     // add table fields
-    $tmp = [];
-    foreach( $this->field_list as $alias => $definition ) $tmp[] = ' ' . $this->buildExpression( $alias );
-    $command .= '(' . implode( ',', $tmp ) . ' )';
+    $fields = array_keys( $this->getField() );
+    if( !empty( $fields ) ) $command .= $this->getConnection()->quoteName( $fields );
 
     // add custom select command if any (and ignore simple and batch insertion)
-    if( isset( $this->custom_list[ static::CUSTOM_SELECT ] ) ) {
+    if( ( $tmp = $this->getCustom( static::CUSTOM_SELECT ) ) ) $command .= ' ' . $tmp[ 0 ];
+    else {
 
-      $select  = $this->custom_list[ static::CUSTOM_SELECT ][ 0 ];
-      $command .= ' ' . $select;
+      // process the fields to match with the headers
+      $batch = [];
+      foreach( $context[ static::CONTEXT_FIELD ] as $slot => $field_list ) {
 
-      // adding fields for batch (mass) insertion
-    } else if( isset( $context[ 'batch!array' ] ) ) {
+        $list = [];
+        foreach( $fields as $i => $alias ) {
 
-      $command .= ' VALUES{batch}';
+          $field = $this->getField( $alias );
+          if( $field != $alias ) $list[] = new Sql\StatementExpression( $this->getConnection(), $field );
+          else if( array_key_exists( $alias, $field_list ) ) $list[] = $field_list[ $alias ];
+          else if( array_key_exists( $i, $field_list ) ) $list[] = $field_list[ $i ];
+          else $list[] = new Sql\StatementExpression( $this->getConnection(), 'DEFAULT' );
+        }
 
-      // adding fields for simple insertion
-    } else {
-
-      $value_array = [];
-      foreach( $this->field_list as $alias => $definition ) {
-        $value_array[] = $this->buildExpression( $alias == $definition ? "{field.{$alias}}" : $definition );
+        $batch[] = $list;
       }
-      $command .= ' VALUES(' . implode( ',', $value_array ) . ' )';
+
+      $context[ '_' . static::CONTEXT_FIELD ] = $batch;
+      $command                                .= ' VALUES{_' . static::CONTEXT_FIELD . '}';
     }
 
     // add duplicate conditions
-    if( isset( $this->custom_list[ static::CUSTOM_ONDUPLICATE ] ) ) {
-      $command .= ' ON DUPLICATE KEY UPDATE ' . implode( ',', $this->custom_list[ static::CUSTOM_ONDUPLICATE ] );
+    if( ( $tmp = $this->getCustom( static::CUSTOM_ONDUPLICATE ) ) ) {
+      // TODO support simple definitions in [ 'field', 'value' ] form or something
+      $command .= ' ON DUPLICATE KEY UPDATE ' . implode( ',', $tmp );
     }
 
     // return the builded command
     return $command;
   }
   /**
-   * Build UPDATE command based on builder data
+   * Build UPDATE command based on statement data
    *
    * http://dev.mysql.com/doc/refman/5.7/en/update.html
    *
    * @return string
    */
   public function getUpdate() {
+
     $command = 'UPDATE';
 
     // adding flags
-    $command .= $this->buildFlags( [ static::FLAG_LOWPRIORITY, static::FLAG_IGNORE ] );
+    $command .= $this->renderFlag( [ static::FLAG_LOWPRIORITY, static::FLAG_IGNORE ] );
 
-    // adding tables
-    $tmp = [];
-    foreach( $this->table_list as $alias => $definition ) if( !is_array( $definition ) ) {
-      $tmp[] = $this->buildExpression( $definition, $alias );
-    }
-    $command .= implode( ',', $tmp );
-
-    // adding joins
-    foreach( $this->table_list as $alias => $data ) if( is_array( $data ) ) {
-      $command .= ' ' . strtoupper( $data[ 'type' ] ) . ' JOIN' . $this->buildExpression( $data[ 'definition' ], $alias ) . ' ON ' . $data[ 'condition' ];
-    }
+    // adding tables (with joins)
+    $command .= $this->renderTableList();
+    $command .= $this->renderTableJoinList();
 
     // adding fields
-    $fields      = $this->field_list;
     $field_array = [];
-    foreach( $fields as $alias => $definition ) {
-      $field_array[] = $this->buildOperation( $definition == $alias ? "{field.{$alias}}" : $definition, $alias, '=' );
+    foreach( $this->getField() as $alias => $field ) {
+
+      $index         = static::CONTEXT_FIELD . '.0.' . $alias;
+      $field_array[] = $this->renderOperator( $alias == $field ? "{{$index}}" : $field, $alias, '=' );
     }
     $command .= ' SET' . implode( ',', $field_array );
 
     // adding filters
-    $command .= $this->buildFilter( 'where' );
+    $command .= $this->renderFilterList( static::FILTER_SIMPLE );
 
     // add single table plus
-    if( count( $this->table_list ) == 1 ) {
-
-      // adding orders
-      $command .= $this->buildList( $this->order_list, 'ORDER BY' );
-
-      // adding limit
-      $command .= $this->buildLimit( $this->limit );
+    if( count( $this->getTable() ) == 1 ) {
+      $command .= $this->renderList( $this->getSort(), 'ORDER BY' );
+      $command .= $this->renderLimit();
     }
 
-    // return the builded command
     return $command;
   }
   /**
-   * Build DELETE command based on builder data
+   * Build DELETE command based on statement data
    *
    * http://dev.mysql.com/doc/refman/5.7/en/delete.html
    *
@@ -244,71 +236,76 @@ class Statement extends Sql\Statement {
     $command = 'DELETE';
 
     // decide to use multi table or single table style
-    $multi = count( $this->table_list ) > 1;
+    $multi = count( $this->getTable() ) > 1;
 
     // adding flags
-    $command .= $this->buildFlags( [ static::FLAG_LOWPRIORITY, static::FLAG_QUICK, static::FLAG_IGNORE ] );
+    $command .= $this->renderFlag( [ static::FLAG_LOWPRIORITY, static::FLAG_QUICK, static::FLAG_IGNORE ] );
 
-    // adding fields that is tables in this context of Builder
-    if( $multi ) {
-
-      foreach( $this->field_list as $alias => $name ) $field_array[] = $this->buildExpression( $name, $alias );
-      $command .= empty( $field_array ) ? '' : implode( ',', $field_array );
+    // adding fields that is tables in multi delete syntax
+    if( $multi && ( $tmp = array_keys( $this->getField() ) ) ) {
+      $command .= $this->getConnection()->quoteName( $tmp );
     }
 
-    // preparing tables
-    $tmp = [];
-    foreach( $this->table_list as $alias => $name ) if( !is_array( $name ) ) {
-
-      // alias not available in single table
-      $tmp[] = $this->buildExpression( $name, $multi ? $alias : $name );
-    }
-
-    // add tables
-    $command .= ' FROM' . implode( ',', $tmp );
-
-    // adding joins in multitable syntax
-    if( $multi ) {
-
-      foreach( $this->table_list as $alias => $data ) if( is_array( $data ) ) {
-        $command .= ' ' . strtoupper( $data[ 'type' ] ) . ' JOIN' . $this->buildExpression( $data[ 'definition' ], $alias ) . ' ON ' . $data[ 'condition' ];
-      }
-    }
+    // adding tables (and joins in multitable syntax)
+    $command .= ' FROM' . $this->renderTableList();
+    if( $multi ) $command .= $this->renderTableJoinList();
 
     // add partitions in single table syntax
-    if( !$multi && !empty( $this->custom_list[ static::CUSTOM_PARTITION ] ) ) {
-      $command .= ' PARTITION (' . implode( ',', $this->custom_list[ static::CUSTOM_PARTITION ] ) . ')';
+    if( !$multi && !( $tmp = $this->getCustom( static::CUSTOM_PARTITION ) ) ) {
+      $command .= ' PARTITION (' . implode( ',', $tmp ) . ')';
     }
 
-    // adding filters
-    $command .= $this->buildFilter( 'where' );
+    //
+    $command .= $this->renderFilterList( static::FILTER_SIMPLE );
 
+    // adding orders and limit only for single table syntax
     if( !$multi ) {
-
-      // adding orders
-      $command .= $this->buildList( $this->order_list, 'ORDER BY' );
-
-      // adding limit
-      $command .= $this->buildLimit( $this->limit );
+      $command .= $this->renderList( $this->getSort(), 'ORDER BY' );
+      $command .= $this->renderLimit();
     }
 
-    // return the builded command
     return $command;
   }
 
   /**
-   * Build stored flags based on the input
+   * Create table(s) that has no condition
    *
-   * @since 0.10.0
+   * @return string
+   */
+  protected function renderTableList() {
+
+    $tmp = [];
+    foreach( $this->getTable() as $alias => $table ) if( empty( $table[ 'filter' ] ) ) {
+      $tmp[] = $this->renderAlias( $table[ 'definition' ], $alias );
+    }
+
+    return implode( ',', $tmp );
+  }
+  /**
+   * Create table(s) that has condition
+   *
+   * @return string
+   */
+  protected function renderTableJoinList() {
+
+    $command = '';
+    foreach( $this->getTable() as $alias => $table ) if( !empty( $table[ 'filter' ] ) ) {
+      $command .= ' ' . strtoupper( $table[ 'type' ] ) . ' JOIN' . $this->renderAlias( $table[ 'definition' ], $alias ) . ' ON ' . $table[ 'filter' ];
+    }
+
+    return $command;
+  }
+  /**
+   * Create stored flags based on the input
    *
    * @param array $include Only include this flags (if any) and in this order
    *
    * @return string
    */
-  protected function buildFlags( array $include ) {
+  protected function renderFlag( array $include ) {
 
     $result = '';
-    $flags  = array_flip( array_map( 'strtoupper', $this->flag_list ) );
+    $flags  = array_flip( array_map( 'strtoupper', $this->getFlag() ) );
     foreach( $include as $flag ) if( array_key_exists( $flag, $flags ) ) {
       $result .= ' ' . $flag;
     }
@@ -316,56 +313,21 @@ class Statement extends Sql\Statement {
     return $result;
   }
   /**
-   * Build expression with alias. This will convert Builder class to valid expression or quote it if needed
-   *
-   * @since 0.10.0
-   *
-   * @param string|Statement $expression
-   * @param string           $alias
-   *
-   * @return string
-   */
-  protected function buildExpression( $expression, $alias = null ) {
-
-    // define the alias part if needed
-    $alias = empty( $alias ) || $alias == $expression ? '' : ( ' AS ' . $this->getConnection()->quoteName( $alias ) );
-
-    // define the expression
-    if( $expression instanceof Statement ) $expression = "({$expression})";
-    else if( preg_match( static::PATTERN_IDENTIFIER, $expression ) ) $expression = $this->getConnection()->quoteName( $expression );
-
-    return ' ' . $expression . $alias;
-  }
-  /**
-   * Build " {field} {operator} {expression}" like strings
-   *
-   * @since 1.1.2
-   *
-   * @param string|Statement $expression
-   * @param string|null      $field
-   * @param string|null      $operator
-   *
-   * @return string
-   */
-  protected function buildOperation( $expression, $field, $operator ) {
-    return ' ' . $this->getConnection()->quoteName( $field ) . ' ' . $operator . $this->buildExpression( $expression );
-  }
-  /**
-   * Build a filter string with the stored data
-   *
-   * @since 0.10.0
+   * Create a filter string with the stored data
    *
    * @param string $type Filter type to build
    *
    * @return string
    */
-  protected function buildFilter( $type ) {
+  protected function renderFilterList( $type ) {
+    $context = $this->getContext();
 
     $imploded = '';
-    if( !empty( $this->filter_list[ $type ] ) ) {
+    if( !empty( $tmp = $this->getFilter( $type ) ) ) {
 
-      foreach( $this->filter_list[ $type ] as $data ) {
-        $imploded .= ( empty( $imploded ) ? '' : ( ' ' . strtoupper( $data[ 'glue' ] ) . ' ' ) ) . $this->buildExpression( $data[ 'expression' ] );
+      $imploded = '(' . implode( ') AND (', $tmp ) . ')';
+      foreach( $context[ static::CONTEXT_FILTER . '.' . $type ] as $name => $_ ) {
+        $imploded = preg_replace( "/\\{([\W]*){$name}(\\.\\})?/", '{$1' . static::CONTEXT_FILTER . '.' . $type . '.' . $name . '$2', $imploded );
       }
 
       $imploded = ' ' . strtoupper( $type ) . ' ' . $imploded;
@@ -374,20 +336,18 @@ class Statement extends Sql\Statement {
     return $imploded;
   }
   /**
-   * Build order and group like lists
-   *
-   * @since 0.10.0
+   * Create order and group like lists
    *
    * @param array  $input
    * @param string $type
    *
    * @return array|string
    */
-  protected function buildList( array $input, $type ) {
+  protected function renderList( array $input, $type ) {
 
     $result = [];
     foreach( $input as $data ) {
-      $result[] = $this->buildExpression( $data[ 0 ] ) . ( isset( $data[ 1 ] ) ? ( ' ' . strtoupper( $data[ 1 ] ) ) : '' );
+      $result[] = '' . $data[ 0 ] . ( isset( $data[ 1 ] ) ? ( ' ' . strtoupper( $data[ 1 ] ) ) : '' );
     }
 
     if( !count( $input ) ) $result = '';
@@ -396,20 +356,37 @@ class Statement extends Sql\Statement {
     return $result;
   }
   /**
-   * Build limit string
-   *
-   * @since 0.10.0
-   *
-   * @param array $input
+   * Create limit string
    *
    * @return string
    */
-  protected function buildLimit( array $input ) {
+  protected function renderLimit() {
 
-    foreach( $input as &$tmp ) if( $tmp != 0 ) {
-      $tmp = trim( $this->buildExpression( $tmp ) );
-    }
+    $limit = $this->getLimit( $offset );
+    return $limit > 0 ? ( ' LIMIT ' . ( $offset > 0 ? implode( ', ', [ $offset, $limit ] ) : $limit ) ) : '';
+  }
 
-    return count( $input ) > 1 && $input[ 1 ] > 0 ? ( ' LIMIT ' . ( $input[ 0 ] > 0 ? implode( ', ', $input ) : $input[ 1 ] ) ) : '';
+  /**
+   * Create expression with(out) alias
+   *
+   * @param string|Statement $expression
+   * @param string           $alias
+   *
+   * @return string
+   */
+  protected function renderAlias( $expression, $alias ) {
+    return ' ' . $expression . ( empty( $alias ) || $alias == $expression ? '' : ( ' AS ' . $this->getConnection()->quoteName( $alias ) ) );
+  }
+  /**
+   * Create " {field} {operator} {expression}" like strings
+   *
+   * @param string|Statement $expression
+   * @param string|null      $field
+   * @param string|null      $operator
+   *
+   * @return string
+   */
+  protected function renderOperator( $expression, $field, $operator ) {
+    return ' ' . $this->getConnection()->quoteName( $field ) . ' ' . $operator . ' ' . $expression;
   }
 }
