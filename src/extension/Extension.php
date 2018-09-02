@@ -2,9 +2,7 @@
 
 use Spoom\Core;
 
-/**
- * Class Extension
- */
+//
 class Extension extends Core\Extension {
 
   const ID   = 'spoom-sql-mysql';

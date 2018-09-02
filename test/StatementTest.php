@@ -1,6 +1,7 @@
 <?php namespace Spoom\Sql\MySQL;
 
 use PHPUnit\Framework\TestCase;
+use Spoom\Sql\Expression;
 
 /**
  * Class StatementTest
@@ -10,11 +11,11 @@ use PHPUnit\Framework\TestCase;
 class StatementTest extends TestCase {
 
   /**
-   * @param Statement $statement
+   * @param Expression\Statement $statement
    *
    * @dataProvider providerStatement
    */
-  public function testSelect( Statement $statement ) {
+  public function testSelect( Expression\Statement $statement ) {
 
     // test field manipulation
     $statement->setField( [ 'fieldwithoutalias', 'fieldwithalias_alias' => 'fieldwithalias', 'fieldwithcontext' ] );
@@ -33,9 +34,9 @@ class StatementTest extends TestCase {
     $statement->addFilter( '{!field} = {test} OR {test1} = 20', [ 'test' => 10, 'test1' => 20, 'field' => 'fieldwithoutalias' ] )
               ->addFilter( '{test2.test} = 30', [ 'test2' => [ 'test' => 30 ] ] );
     $this->assertEquals( '(SELECT fieldwithoutalias FROM tablewithoutjoin WHERE (`fieldwithoutalias` = 10 OR 20 = 20) AND (30 = 30))', (string) $statement );
-    $statement->removeFilter( Statement::FILTER_SIMPLE, '{test2.test} = 30', [ 'test2' ] );
+    $statement->removeFilter( Expression\Statement::FILTER_SIMPLE, '{test2.test} = 30', [ 'test2' ] );
     $this->assertEquals( '(SELECT fieldwithoutalias FROM tablewithoutjoin WHERE (`fieldwithoutalias` = 10 OR 20 = 20))', (string) $statement );
-    $this->assertNull( $statement->getContext()[ Statement::FILTER_SIMPLE . '.' . Statement::FILTER_SIMPLE . '.test2' ] );
+    $this->assertNull( $statement->getContext()[ Expression\Statement::FILTER_SIMPLE . '.' . Expression\Statement::FILTER_SIMPLE . '.test2' ] );
 
     // test limit
     $statement->setLimit( 1000 );
@@ -47,11 +48,11 @@ class StatementTest extends TestCase {
   }
 
   /**
-   * @param Statement $statement
+   * @param Expression\Statement $statement
    *
    * @dataProvider providerStatement
    */
-  public function testInsert( Statement $statement ) {
+  public function testInsert( Expression\Statement $statement ) {
 
     // test mass insert
     $statement->setField( [ 'fieldwithoutalias', 'fieldwithalias_alias' => 'fieldwithalias', 'fieldwithcontext' ] );
@@ -65,11 +66,11 @@ class StatementTest extends TestCase {
   }
 
   /**
-   * @param Statement $statement
+   * @param Expression\Statement $statement
    *
    * @dataProvider providerStatement
    */
-  public function testUpdate( Statement $statement ) {
+  public function testUpdate( Expression\Statement $statement ) {
 
     // test field render in an update
     $statement->setField( [ 'fieldwithoutalias', 'fieldwithalias_alias' => 'fieldwithalias', 'fieldwithcontext' ] );

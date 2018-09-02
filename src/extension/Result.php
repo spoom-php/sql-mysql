@@ -3,8 +3,6 @@
 use Spoom\Sql;
 
 /**
- * Class Result
- *
  * @property-read \mysqli_result|bool $result
  */
 class Result extends Sql\Result {
@@ -115,7 +113,7 @@ class Result extends Sql\Result {
     return @$result->data_seek( $record ) ? $this->process( @$result->fetch_object() ) : null;
   }
   //
-  public function getObjectList( $index = null ): array {
+  public function getObjectList( string $index = null ): array {
     if( !$this->data || $this->getException() ) return [];
 
     $result = $this->getResult();

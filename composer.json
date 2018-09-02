@@ -11,7 +11,9 @@
   ],
 
   "require": {
-    "php": "^7.1.0",
+    "php": "^7.2.0",
+    "ext-mysqli": "*",
+
     "spoom-php/composer": "^1.0.0",
     "spoom-php/core": "@dev",
     "spoom-php/sql": "@dev"

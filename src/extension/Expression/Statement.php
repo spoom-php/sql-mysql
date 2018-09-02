@@ -1,15 +1,13 @@
-<?php namespace Spoom\Sql\MySQL;
+<?php namespace Spoom\Sql\MySQL\Expression;
 
 use Spoom\Sql;
 use Spoom\Sql\ConnectionInterface;
 
 /**
- * Class Statement
- *
  * TODO add validity checks with error throwing?
  * TODO add support for flags that unset other flags
  */
-class Statement extends Sql\Statement {
+class Statement extends Sql\Expression\Statement {
 
   const CUSTOM_PARTITION   = 'partition';
   const CUSTOM_SELECT      = 'select';
@@ -165,10 +163,10 @@ class Statement extends Sql\Statement {
         foreach( $fields as $i => $alias ) {
 
           $field = $this->getField( $alias );
-          if( $field != $alias ) $list[] = new Sql\StatementExpression( $this->getConnection(), $field );
+          if( $field != $alias ) $list[] = is_object( $field ) && $field instanceof Sql\Expression ? $field : $this->getConnection()->expression( $field );
           else if( array_key_exists( $alias, $field_list ) ) $list[] = $field_list[ $alias ];
           else if( array_key_exists( $i, $field_list ) ) $list[] = $field_list[ $i ];
-          else $list[] = new Sql\StatementExpression( $this->getConnection(), 'DEFAULT' );
+          else $list[] = $this->getConnection()->name( 'DEFAULT' );
         }
 
         $batch[] = $list;
@@ -196,7 +194,9 @@ class Statement extends Sql\Statement {
    */
   public function getUpdate() {
 
-    $command = 'UPDATE';
+    $context    = $this->getContext();
+    $field_list = $context[ static::CONTEXT_FIELD . '.0' ];
+    $command    = 'UPDATE';
 
     // adding flags
     $command .= $this->renderFlag( [ static::FLAG_LOWPRIORITY, static::FLAG_IGNORE ] );
@@ -209,8 +209,12 @@ class Statement extends Sql\Statement {
     $field_array = [];
     foreach( $this->getField() as $alias => $field ) {
 
-      $index         = static::CONTEXT_FIELD . '.0.' . $alias;
-      $field_array[] = $this->renderOperator( $alias == $field ? "{{$index}}" : $field, $alias, '=' );
+      $field = $this->getField( $alias );
+      if( $field != $alias ) $_field = is_object( $field ) && $field instanceof Sql\Expression ? $field : $this->getConnection()->expression( $field );
+      else if( array_key_exists( $alias, $field_list ) ) $_field = $field_list[ $alias ];
+      else $_field = $this->getConnection()->name( 'DEFAULT' );
+
+      $field_array[] = $this->renderOperator( $this->getConnection()->apply( '{0}', [ $_field ] ), $alias, '=' );
     }
     $command .= ' SET' . implode( ',', $field_array );
 
@@ -243,7 +247,7 @@ class Statement extends Sql\Statement {
 
     // adding fields that is tables in multi delete syntax
     if( $multi && ( $tmp = array_keys( $this->getField() ) ) ) {
-      $command .= $this->getConnection()->quoteName( $tmp );
+      $command .= ' ' . $this->getConnection()->quoteName( $tmp, false );
     }
 
     // adding tables (and joins in multitable syntax)
@@ -347,7 +351,7 @@ class Statement extends Sql\Statement {
 
     $result = [];
     foreach( $input as $data ) {
-      $result[] = '' . $data[ 0 ] . ( isset( $data[ 1 ] ) ? ( ' ' . strtoupper( $data[ 1 ] ) ) : '' );
+      $result[] = ' ' . $data[ 0 ] . ( isset( $data[ 1 ] ) ? ( ' ' . strtoupper( $data[ 1 ] ) ) : '' );
     }
 
     if( !count( $input ) ) $result = '';

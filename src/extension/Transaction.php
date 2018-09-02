@@ -5,8 +5,6 @@ use Spoom\Sql;
 use Spoom\Core\Helper;
 
 /**
- * Class Transaction
- *
  * @since 1.1.0
  *
  * @property-read bool       $pending

@@ -2,12 +2,9 @@
 
 use Spoom\Core\Exception;
 use Spoom\Sql;
-use Spoom\Sql\StatementInterface;
 use Spoom\Sql\TransactionInterface;
 
 /**
- * Class Connection
- *
  * @property-read \mysqli $resource
  */
 class Connection extends Sql\Connection {
@@ -78,8 +75,8 @@ class Connection extends Sql\Connection {
   }
 
   //
-  public function statement(): StatementInterface {
-    return new Statement( $this );
+  public function statement(): Sql\Expression\StatementInterface {
+    return new Expression\Statement( $this );
   }
 
   //
@@ -106,7 +103,7 @@ class Connection extends Sql\Connection {
         $result_list[] = new Result(
           $query,
           $tmp,
-          !$tmp && $this->_resource->errno ? new Sql\StatementException( $query, $this, static::exception( $this->_resource ) ) : null,
+          !$tmp && $this->_resource->errno ? new Sql\Expression\StatementException( $query, $this, static::exception( $this->_resource ) ) : null,
           $this->_resource->affected_rows,
           $this->_resource->insert_id
         );
@@ -114,7 +111,7 @@ class Connection extends Sql\Connection {
       } while( $result && $this->_resource->more_results() && @$this->_resource->next_result() );
 
     } catch( \mysqli_sql_exception $e ) {
-      $result_list = [ new Result( $query, null, new Sql\StatementException( $query, $this, $e ) ) ];
+      $result_list = [ new Result( $query, null, new Sql\Expression\StatementException( $query, $this, $e ) ) ];
     }
 
     // create and return the result object
